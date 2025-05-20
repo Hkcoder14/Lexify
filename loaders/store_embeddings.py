@@ -1,14 +1,12 @@
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-import os 
-import pickle
-
-#Load the split chunks
+# Load the split chunks function from your module
 from Text_Extraction import extract_and_split_all_pdfs
+
 pdf_folder = "Documents"
 persist_directory = "VectoreStore/chroma"
 
-#load chunks
+# Load chunks from PDFs
 split_texts = extract_and_split_all_pdfs(pdf_folder)
 
 # Flatten the chunks (with metadata)
@@ -23,7 +21,7 @@ for filename, chunks in split_texts.items():
 # Initialize embedding model
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Create vectorstore
+# Create Chroma vector store with persistence enabled
 vectorstore = Chroma.from_texts(
     texts=documents,
     embedding=embedding_model,
@@ -31,6 +29,4 @@ vectorstore = Chroma.from_texts(
     persist_directory=persist_directory
 )
 
-# Save to disk
-vectorstore.persist()
 print("✅ Embeddings stored in Chroma DB.")
