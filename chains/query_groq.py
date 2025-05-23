@@ -1,89 +1,82 @@
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
-from langchain_core.prompts import PromptTemplate
-from groq import Groq
 import os
 from dotenv import load_dotenv
-from langchain.llms.base import LLM
-from pydantic import BaseModel, Field
-from typing import Optional, List, Mapping, Any
+from langchain_chroma import Chroma
+from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains import RetrievalQA, LLMChain
+from langchain.prompts import PromptTemplate
+from langchain_groq import ChatGroq
 
+# Load API Key
 load_dotenv()
-api_key = os.getenv("GROQ_API_KEY")
+groq_api_key = os.getenv("GROQ_API_KEY")
 
-class GroqLLM(LLM, BaseModel):
-    api_key: str
-    model_name: str
-    client: Groq = Field(default=None, exclude=True)
+# Paths
+persist_directory = "VectoreStore/chroma"
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.client = Groq(api_key=self.api_key)
+# Embedding and LLM
+embedding = HuggingFaceEmbeddings(model="all-MiniLM-L6-v2")
+llm = ChatGroq(api_key=groq_api_key, model="llama3-70b-8192")
 
-    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt},
-        ]
+# Load Vector Store
+vectordb = Chroma(persist_directory=persist_directory, embedding_function=embedding)
 
-        kwargs = {
-            "model": self.model_name,
-            "messages": messages,
-            "max_tokens": 512,
-        }
-        if stop:
-            kwargs["stop_sequences"] = stop
+# Better Retriever: Using MMR and fetching top 10 results
+retriever = vectordb.as_retriever(search_type="mmr", search_kwargs={"k": 10})
 
-        response = self.client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content.strip()
+# Step 1: Query Reformulation Chain
+query_expansion_prompt = PromptTemplate.from_template("""
+You are a legal query reformulator. A user may ask a question in casual language.
+Your job is to reformulate it into a formal legal search query using appropriate terminology,
+relevant to Indian law (IPC, CrPC, Labor law, etc.).
 
-    @property
-    def _identifying_params(self) -> Mapping[str, Any]:
-        return {"model_name": self.model_name}
+Original question: {query}
 
-    @property
-    def _llm_type(self) -> str:
-        return "groq"
+Reformulated legal query:
+""")
+reformulation_chain = LLMChain(llm=llm, prompt=query_expansion_prompt)
 
+# Step 2: QA Chain with custom prompt
+custom_prompt = PromptTemplate.from_template("""
+You are a legal assistant. Use only the provided context to answer.
+If the context doesn't contain the answer, say "I don't know."
 
-# 1. Load Chroma Vector Store
-embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-vectorstore = Chroma(
-    persist_directory="vectorstore/chroma",
-    embedding_function=embedding_model
-)
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+Context:
+{context}
 
-# 2. Setup Groq LLM
-llm = GroqLLM(
-    api_key=api_key,
-    model_name="meta-llama/llama-4-scout-17b-16e-instruct"
-)
-
-# 3. Prompt Template
-prompt = PromptTemplate.from_template("""
-Use the following legal context to answer the question as accurately as possible.
-If you don't know the answer, just say you don't know.
-
-Context: {context}
 Question: {question}
 """)
 
-# 4. Create RetrievalQA chain
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=retriever,
     chain_type="stuff",
-    chain_type_kwargs={"prompt": prompt}
+    chain_type_kwargs={"prompt": custom_prompt}
 )
 
-# 5. Ask questions loop
+# Debug tool: Show top retrieved documents
+def test_retrieval(query):
+    print("\n🔍 Retrieved Documents Preview:")
+    docs = retriever.invoke(query)
+    if not docs:
+        print("⚠️ No relevant documents found.")
+    for i, doc in enumerate(docs[:3], 1):  # Show top 3
+        print(f"\n📄 Document {i} Preview:\n{doc.page_content[:400]}...\n[Source: {doc.metadata.get('source')}]\n")
+
+# Main chat loop
+print("🧠 Ask me anything about Indian law (type 'exit' to quit):\n")
 while True:
-    query = input("Ask a legal question: ")
-    if query.lower() in ["exit", "quit"]:
+    user_query = input("You: ")
+    if user_query.lower() == 'exit':
         break
 
-    # use invoke() to avoid deprecation warnings
-    result = qa_chain.invoke({"query": query})
+    # Reformulate query
+    reformulated_query = reformulation_chain.run({"query": user_query})
+    print(f"\n🔁 Reformulated Query:\n{reformulated_query}")
+
+    # Debug: Show retrieved documents
+    test_retrieval(reformulated_query)
+
+    # Run QA chain
+    result = qa_chain.run(reformulated_query)
     print(f"\n📜 Answer:\n{result}\n")
