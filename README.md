@@ -2,6 +2,7 @@
 # ⚖️ Lexify - Indian Legal Assistant
 
 **Lexify** is an AI-powered legal assistant built to help users understand Indian laws using simple, natural language queries. Whether you're concerned about employment rights, landlord disputes, cybercrime, or general legal protections, Lexify provides accessible legal insights based on key Indian statutes and laws.
+![Home Page](images/ss1.png)
 
 ---
 
@@ -142,8 +143,6 @@ streamlit run app.py
 ---
 
 ## 📸 Screenshots
-### 🏠 Home Page
-![Home Page](images/ss1.png)
 ### Query 1
 ![Query 1](images/ss2.png)
 ### Query 2
