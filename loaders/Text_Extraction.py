@@ -1,37 +1,28 @@
-import fitz
+import fitz  # PyMuPDF
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.docstore.document import Document
 
-def extract_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    text = ""
-    for page in doc:
-        text+= page.get_text()
-    doc.close()
-    return text
+def extract_pdf_text(pdf_path):
+    with fitz.open(pdf_path) as doc:
+        return "\n".join(page.get_text() for page in doc)
 
-def extract_and_split_all_pdfs(folder_path, chunk_size = 1000, chunk_overlap = 200):
+def extract_and_split_all_pdfs(folder_path, chunk_size=800, chunk_overlap=100):
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ".", " "]
     )
-    split_docs = {}
 
+    all_docs = {}
     for filename in os.listdir(folder_path):
-        if filename.endswith(".pdf"):
-            pdf_path = os.path.join(folder_path, filename)
-            full_text = extract_pdf(pdf_path)
+        if not filename.endswith(".pdf"):
+            continue
 
-            # Split into chunks
-            chunks = splitter.split_text(full_text)
-            split_docs[filename] = chunks
+        path = os.path.join(folder_path, filename)
+        text = extract_pdf_text(path)
+        chunks = splitter.split_text(text)
 
-    return split_docs
+        all_docs[filename] = chunks
 
-if __name__ == "__main__":
-    folder = "Documents"
-    split_texts = extract_and_split_all_pdfs(folder)
-
-
-
-
+    return all_docs
