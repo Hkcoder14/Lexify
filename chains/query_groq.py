@@ -15,7 +15,7 @@ persist_directory = "VectoreStore/chroma"
 
 # Embedding + LLM setup
 embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-llm = ChatGroq(api_key=groq_api_key, model="llama3-70b-8192")
+llm = ChatGroq(api_key=groq_api_key, model="llama3-8b-8192")
 
 # Load Chroma vector DB
 vectordb = Chroma(persist_directory=persist_directory, embedding_function=embedding)
